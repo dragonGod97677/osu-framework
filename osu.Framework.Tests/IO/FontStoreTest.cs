@@ -18,24 +18,39 @@ namespace osu.Framework.Tests.IO
         public void OneTimeSetUp()
         {
             storage = new TemporaryNativeStorage("fontstore-test");
-            fontResourceStore = new NamespacedResourceStore<byte[]>(new DllResourceStore(typeof(Drawable).Assembly.Location), "Resources.Fonts.OpenSans");
-
-            storage.GetFullPath("./", true);
+            fontResourceStore = new NamespacedResourceStore<byte[]>(new DllResourceStore(typeof(Drawable).Assembly), "Resources.Fonts.Roboto");
         }
 
         [Test]
         public void TestNestedScaleAdjust()
         {
-            var fontStore = new FontStore(new GlyphStore(fontResourceStore, "OpenSans") { CacheStorage = storage }, scaleAdjust: 100);
-            var nestedFontStore = new FontStore(new GlyphStore(fontResourceStore, "OpenSans-Bold") { CacheStorage = storage }, 10);
+            using (var fontStore = new FontStore(new RawCachingGlyphStore(fontResourceStore, "Roboto-Regular") { CacheStorage = storage }, scaleAdjust: 100))
+            using (var nestedFontStore = new FontStore(new RawCachingGlyphStore(fontResourceStore, "Roboto-Bold") { CacheStorage = storage }, 10))
+            {
+                fontStore.AddStore(nestedFontStore);
 
-            fontStore.AddStore(nestedFontStore);
+                var normalGlyph = (TexturedCharacterGlyph)fontStore.Get("Roboto-Regular", 'a');
+                Assert.That(normalGlyph, Is.Not.Null);
 
-            var normalGlyph = (TexturedCharacterGlyph)fontStore.Get("OpenSans", 'a');
-            var boldGlyph = (TexturedCharacterGlyph)fontStore.Get("OpenSans-Bold", 'a');
+                var boldGlyph = (TexturedCharacterGlyph)fontStore.Get("Roboto-Bold", 'a');
+                Assert.That(boldGlyph, Is.Not.Null);
 
-            Assert.That(normalGlyph.Scale, Is.EqualTo(1f / 100));
-            Assert.That(boldGlyph.Scale, Is.EqualTo(1f / 10));
+                Assert.That(normalGlyph.Scale, Is.EqualTo(1f / 100));
+                Assert.That(boldGlyph.Scale, Is.EqualTo(1f / 10));
+            }
+        }
+
+        [Test]
+        public void TestNoCrashOnMissingResources()
+        {
+            using (var glyphStore = new RawCachingGlyphStore(fontResourceStore, "DoesntExist") { CacheStorage = storage })
+            using (var fontStore = new FontStore(glyphStore, 100))
+            {
+                Assert.That(glyphStore.Get('a'), Is.Null);
+
+                Assert.That(fontStore.Get("DoesntExist", 'a'), Is.Null);
+                Assert.That(fontStore.Get("OtherAttempt", 'a'), Is.Null);
+            }
         }
 
         [OneTimeTearDown]

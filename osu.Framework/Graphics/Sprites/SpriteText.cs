@@ -6,14 +6,15 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using osu.Framework.Allocation;
 using osu.Framework.Bindables;
-using osu.Framework.Caching;
 using osu.Framework.Development;
+using osu.Framework.Extensions.IEnumerableExtensions;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Shaders;
 using osu.Framework.Graphics.UserInterface;
 using osu.Framework.IO.Stores;
+using osu.Framework.Layout;
 using osu.Framework.Localisation;
-using osu.Framework.MathUtils;
+using osu.Framework.Utils;
 using osu.Framework.Text;
 using osuTK;
 using osuTK.Graphics;
@@ -41,15 +42,44 @@ namespace osu.Framework.Graphics.Sprites
 
         public SpriteText()
         {
-            current.BindValueChanged(text => Text = text.NewValue);
+            current.BindValueChanged(text =>
+            {
+                // importantly, to avoid a feedback loop which will overwrite a localised text object, check equality of the resulting text before propagating a basic string to Text.
+                // in the case localisedText is not yet setup, special consideration does not need to be given as it can be assumed the change to current was a user invoked change.
+                if (localisedText == null || text.NewValue != localisedText.Value)
+                    Text = text.NewValue;
+            });
+
+            AddLayout(charactersCache);
+            AddLayout(parentScreenSpaceCache);
+            AddLayout(localScreenSpaceCache);
+            AddLayout(shadowOffsetCache);
+            AddLayout(textBuilderCache);
         }
 
         [BackgroundDependencyLoader]
         private void load(ShaderManager shaders)
         {
             localisedText = localisation.GetLocalisedString(text);
+
+            TextureShader = shaders.Load(VertexShaderDescriptor.TEXTURE_2, FragmentShaderDescriptor.TEXTURE);
+            RoundedTextureShader = shaders.Load(VertexShaderDescriptor.TEXTURE_2, FragmentShaderDescriptor.TEXTURE_ROUNDED);
+
+            // Pre-cache the characters in the texture store
+            foreach (var character in localisedText.Value)
+            {
+                var unused = store.Get(font.FontName, character) ?? store.Get(null, character);
+            }
+        }
+
+        protected override void LoadComplete()
+        {
+            base.LoadComplete();
+
             localisedText.BindValueChanged(str =>
             {
+                current.Value = localisedText.Value;
+
                 if (string.IsNullOrEmpty(str.NewValue))
                 {
                     // We'll become not present and won't update the characters to set the size to 0, so do it manually
@@ -61,63 +91,39 @@ namespace osu.Framework.Graphics.Sprites
 
                 invalidate(true);
             }, true);
-
-            TextureShader = shaders.Load(VertexShaderDescriptor.TEXTURE_2, FragmentShaderDescriptor.TEXTURE);
-            RoundedTextureShader = shaders.Load(VertexShaderDescriptor.TEXTURE_2, FragmentShaderDescriptor.TEXTURE_ROUNDED);
-
-            // Pre-cache the characters in the texture store
-            foreach (var character in displayedText)
-            {
-                var unused = store.Get(font.FontName, character) ?? store.Get(null, character);
-            }
         }
 
-        private LocalisedString text = string.Empty;
+        private LocalisableString text = string.Empty;
 
         /// <summary>
         /// Gets or sets the text to be displayed.
         /// </summary>
-        public LocalisedString Text
+        public LocalisableString Text
         {
             get => text;
             set
             {
-                if (text == value)
+                if (text.Equals(value))
                     return;
 
                 text = value;
 
-                current.Value = text;
-
                 if (localisedText != null)
+                {
                     localisedText.Text = value;
+                }
             }
         }
 
-        private readonly Bindable<string> current = new Bindable<string>(string.Empty);
-
-        private Bindable<string> currentBound;
+        private readonly BindableWithCurrent<string> current = new BindableWithCurrent<string>();
 
         public Bindable<string> Current
         {
-            get => current;
-            set
-            {
-                if (value == null)
-                    throw new ArgumentNullException(nameof(value));
-
-                if (currentBound != null) current.UnbindFrom(currentBound);
-                current.BindTo(currentBound = value);
-            }
+            get => current.Current;
+            set => current.Current = value;
         }
 
-        private string displayedText => localisedText?.Value ?? text.Text.Original;
-
-        string IHasText.Text
-        {
-            get => Text;
-            set => Text = value;
-        }
+        private string displayedText => localisedText?.Value ?? text.ToString();
 
         private FontUsage font = FontUsage.Default;
 
@@ -131,7 +137,7 @@ namespace osu.Framework.Graphics.Sprites
             {
                 font = value;
 
-                invalidate(true);
+                invalidate(true, true);
                 shadowOffsetCache.Invalidate();
             }
         }
@@ -156,8 +162,7 @@ namespace osu.Framework.Graphics.Sprites
                     Truncate = false;
 
                 allowMultiline = value;
-
-                invalidate(true);
+                invalidate(true, true);
             }
         }
 
@@ -235,7 +240,7 @@ namespace osu.Framework.Graphics.Sprites
 
                 useFullGlyphHeight = value;
 
-                invalidate(true);
+                invalidate(true, true);
             }
         }
 
@@ -259,7 +264,7 @@ namespace osu.Framework.Graphics.Sprites
                     AllowMultiline = false;
 
                 truncate = value;
-                invalidate(true);
+                invalidate(true, true);
             }
         }
 
@@ -277,7 +282,7 @@ namespace osu.Framework.Graphics.Sprites
                 if (ellipsisString == value) return;
 
                 ellipsisString = value;
-                invalidate(true);
+                invalidate(true, true);
             }
         }
 
@@ -306,7 +311,7 @@ namespace osu.Framework.Graphics.Sprites
                 base.Width = value;
                 explicitWidth = value;
 
-                invalidate(true);
+                invalidate(true, true);
             }
         }
 
@@ -327,7 +332,7 @@ namespace osu.Framework.Graphics.Sprites
                     return;
 
                 maxWidth = value;
-                invalidate(true);
+                invalidate(true, true);
             }
         }
 
@@ -352,7 +357,7 @@ namespace osu.Framework.Graphics.Sprites
                 base.Height = value;
                 explicitHeight = value;
 
-                invalidate(true);
+                invalidate(true, true);
             }
         }
 
@@ -389,7 +394,7 @@ namespace osu.Framework.Graphics.Sprites
 
                 spacing = value;
 
-                invalidate(true);
+                invalidate(true, true);
             }
         }
 
@@ -410,7 +415,7 @@ namespace osu.Framework.Graphics.Sprites
 
                 padding = value;
 
-                invalidate(true);
+                invalidate(true, true);
             }
         }
 
@@ -418,7 +423,11 @@ namespace osu.Framework.Graphics.Sprites
 
         #region Characters
 
-        private readonly Cached charactersCache = new Cached();
+        private readonly LayoutValue charactersCache = new LayoutValue(Invalidation.DrawSize | Invalidation.Presence, InvalidationSource.Parent);
+
+        /// <summary>
+        /// Glyph list to be passed to <see cref="TextBuilder"/>.
+        /// </summary>
         private readonly List<TextBuilderGlyph> charactersBacking = new List<TextBuilderGlyph>();
 
         /// <summary>
@@ -454,22 +463,25 @@ namespace osu.Framework.Graphics.Sprites
             Debug.Assert(!isComputingCharacters, "Cyclic invocation of computeCharacters()!");
             isComputingCharacters = true;
 
-            TextBuilder textBuilder = null;
+            Vector2 textBounds = Vector2.Zero;
 
             try
             {
                 if (string.IsNullOrEmpty(displayedText))
                     return;
 
-                textBuilder = CreateTextBuilder(store);
+                TextBuilder textBuilder = getTextBuilder();
+
+                textBuilder.Reset();
                 textBuilder.AddText(displayedText);
+                textBounds = textBuilder.Bounds;
             }
             finally
             {
                 if (requiresAutoSizedWidth)
-                    base.Width = (textBuilder?.Bounds.X ?? 0) + Padding.Right;
+                    base.Width = textBounds.X + Padding.Right;
                 if (requiresAutoSizedHeight)
-                    base.Height = (textBuilder?.Bounds.Y ?? 0) + Padding.Bottom;
+                    base.Height = textBounds.Y + Padding.Bottom;
 
                 base.Width = Math.Min(base.Width, MaxWidth);
 
@@ -478,7 +490,9 @@ namespace osu.Framework.Graphics.Sprites
             }
         }
 
-        private readonly Cached screenSpaceCharactersCache = new Cached();
+        private readonly LayoutValue parentScreenSpaceCache = new LayoutValue(Invalidation.DrawSize | Invalidation.Presence | Invalidation.DrawInfo, InvalidationSource.Parent);
+        private readonly LayoutValue localScreenSpaceCache = new LayoutValue(Invalidation.MiscGeometry, InvalidationSource.Self);
+
         private readonly List<ScreenSpaceCharacterPart> screenSpaceCharactersBacking = new List<ScreenSpaceCharacterPart>();
 
         /// <summary>
@@ -495,7 +509,13 @@ namespace osu.Framework.Graphics.Sprites
 
         private void computeScreenSpaceCharacters()
         {
-            if (screenSpaceCharactersCache.IsValid)
+            if (!parentScreenSpaceCache.IsValid)
+            {
+                localScreenSpaceCache.Invalidate();
+                parentScreenSpaceCache.Validate();
+            }
+
+            if (localScreenSpaceCache.IsValid)
                 return;
 
             screenSpaceCharactersBacking.Clear();
@@ -512,10 +532,10 @@ namespace osu.Framework.Graphics.Sprites
                 });
             }
 
-            screenSpaceCharactersCache.Validate();
+            localScreenSpaceCache.Validate();
         }
 
-        private readonly Cached<Vector2> shadowOffsetCache = new Cached<Vector2>();
+        private readonly LayoutValue<Vector2> shadowOffsetCache = new LayoutValue<Vector2>(Invalidation.DrawInfo, InvalidationSource.Parent);
 
         private Vector2 premultipliedShadowOffset =>
             shadowOffsetCache.IsValid ? shadowOffsetCache.Value : shadowOffsetCache.Value = ToScreenSpace(shadowOffset * Font.Size) - ToScreenSpace(Vector2.Zero);
@@ -524,35 +544,18 @@ namespace osu.Framework.Graphics.Sprites
 
         #region Invalidation
 
-        private void invalidate(bool layout = false)
+        private void invalidate(bool characters = false, bool textBuilder = false)
         {
-            if (layout)
+            if (characters)
                 charactersCache.Invalidate();
-            screenSpaceCharactersCache.Invalidate();
 
-            Invalidate(Invalidation.DrawNode, shallPropagate: false);
-        }
+            if (textBuilder)
+                InvalidateTextBuilder();
 
-        public override bool Invalidate(Invalidation invalidation = Invalidation.All, Drawable source = null, bool shallPropagate = true)
-        {
-            base.Invalidate(invalidation, source, shallPropagate);
+            parentScreenSpaceCache.Invalidate();
+            localScreenSpaceCache.Invalidate();
 
-            if (source == Parent)
-            {
-                // Colour captures presence changes
-                if ((invalidation & (Invalidation.DrawSize | Invalidation.Presence)) > 0)
-                    invalidate(true);
-
-                if ((invalidation & Invalidation.DrawInfo) > 0)
-                {
-                    invalidate();
-                    shadowOffsetCache.Invalidate();
-                }
-            }
-            else if ((invalidation & Invalidation.MiscGeometry) > 0)
-                invalidate();
-
-            return true;
+            Invalidate(Invalidation.DrawNode);
         }
 
         #endregion
@@ -566,12 +569,24 @@ namespace osu.Framework.Graphics.Sprites
         /// <summary>
         /// The characters that should be excluded from fixed-width application. Defaults to (".", ",", ":", " ") if null.
         /// </summary>
-        protected virtual char[] FixedWidthExcludeCharacters { get; } = null;
+        protected virtual char[] FixedWidthExcludeCharacters => null;
+
+        /// <summary>
+        /// The character to use to calculate the fixed width width. Defaults to 'm'.
+        /// </summary>
+        protected virtual char FixedWidthReferenceCharacter => 'm';
 
         /// <summary>
         /// The character to fallback to use if a character glyph lookup failed.
         /// </summary>
         protected virtual char FallbackCharacter => '?';
+
+        private readonly LayoutValue<TextBuilder> textBuilderCache = new LayoutValue<TextBuilder>(Invalidation.DrawSize, InvalidationSource.Parent);
+
+        /// <summary>
+        /// Invalidates the current <see cref="TextBuilder"/>, causing a new one to be created next time it's required via <see cref="CreateTextBuilder"/>.
+        /// </summary>
+        protected void InvalidateTextBuilder() => textBuilderCache.Invalidate();
 
         /// <summary>
         /// Creates a <see cref="TextBuilder"/> to generate the character layout for this <see cref="SpriteText"/>.
@@ -589,17 +604,25 @@ namespace osu.Framework.Graphics.Sprites
             if (AllowMultiline)
             {
                 return new MultilineTextBuilder(store, Font, builderMaxWidth, UseFullGlyphHeight, new Vector2(Padding.Left, Padding.Top), Spacing, charactersBacking,
-                    excludeCharacters, FallbackCharacter);
+                    excludeCharacters, FallbackCharacter, FixedWidthReferenceCharacter);
             }
 
             if (Truncate)
             {
                 return new TruncatingTextBuilder(store, Font, builderMaxWidth, ellipsisString, UseFullGlyphHeight, new Vector2(Padding.Left, Padding.Top), Spacing, charactersBacking,
-                    excludeCharacters, FallbackCharacter);
+                    excludeCharacters, FallbackCharacter, FixedWidthReferenceCharacter);
             }
 
             return new TextBuilder(store, Font, builderMaxWidth, UseFullGlyphHeight, new Vector2(Padding.Left, Padding.Top), Spacing, charactersBacking,
-                excludeCharacters, FallbackCharacter);
+                excludeCharacters, FallbackCharacter, FixedWidthReferenceCharacter);
+        }
+
+        private TextBuilder getTextBuilder()
+        {
+            if (!textBuilderCache.IsValid)
+                textBuilderCache.Value = CreateTextBuilder(store);
+
+            return textBuilderCache.Value;
         }
 
         public override string ToString() => $@"""{displayedText}"" " + base.ToString();
@@ -622,9 +645,6 @@ namespace osu.Framework.Graphics.Sprites
             }
         }
 
-        public IEnumerable<string> FilterTerms
-        {
-            get { yield return displayedText; }
-        }
+        public IEnumerable<string> FilterTerms => displayedText.Yield();
     }
 }

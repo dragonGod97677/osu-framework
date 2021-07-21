@@ -7,6 +7,7 @@ using osu.Framework.Graphics.Cursor;
 using osu.Framework.Graphics.Shapes;
 using osu.Framework.Graphics.Sprites;
 using osu.Framework.Graphics.UserInterface;
+using osu.Framework.Localisation;
 using osuTK;
 using osuTK.Graphics;
 
@@ -166,7 +167,7 @@ namespace osu.Framework.Tests.Visual.UserInterface
 
             private class CustomContent
             {
-                public readonly string Text;
+                public readonly LocalisableString Text;
 
                 public CustomContent(string text)
                 {
@@ -212,9 +213,7 @@ namespace osu.Framework.Tests.Visual.UserInterface
 
         private class TooltipSpriteText : Container, IHasTooltip
         {
-            private readonly string tooltipContent;
-
-            public string TooltipText => tooltipContent;
+            public LocalisableString TooltipText { get; }
 
             public TooltipSpriteText(string displayedContent)
                 : this(displayedContent, displayedContent)
@@ -223,7 +222,7 @@ namespace osu.Framework.Tests.Visual.UserInterface
 
             public TooltipSpriteText(string displayedContent, string tooltipContent)
             {
-                this.tooltipContent = tooltipContent;
+                TooltipText = tooltipContent;
 
                 AutoSizeAxes = Axes.Both;
                 Children = new[]
@@ -248,7 +247,7 @@ namespace osu.Framework.Tests.Visual.UserInterface
 
         private class TooltipTooltipContainer : TooltipContainer, IHasTooltip
         {
-            public string TooltipText { get; set; }
+            public LocalisableString TooltipText { get; set; }
 
             public TooltipTooltipContainer(string tooltipText)
             {
@@ -258,12 +257,12 @@ namespace osu.Framework.Tests.Visual.UserInterface
 
         private class TooltipTextbox : BasicTextBox, IHasTooltip
         {
-            public string TooltipText => Text;
+            public LocalisableString TooltipText => Text;
         }
 
         private class TooltipBox : Box, IHasTooltip
         {
-            public string TooltipText { get; set; }
+            public LocalisableString TooltipText { get; set; }
         }
 
         private class RectangleCursorContainer : CursorContainer

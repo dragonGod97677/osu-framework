@@ -89,10 +89,9 @@ namespace osu.Framework.Tests.Visual.Input
                 return true;
             }
 
-            public bool OnReleased(TestAction action)
+            public void OnReleased(TestAction action)
             {
                 Released = true;
-                return true;
             }
         }
 
@@ -103,7 +102,7 @@ namespace osu.Framework.Tests.Visual.Input
 
         private class TestKeyBindingContainer : KeyBindingContainer<TestAction>
         {
-            public override IEnumerable<KeyBinding> DefaultKeyBindings => new[]
+            public override IEnumerable<IKeyBinding> DefaultKeyBindings => new[]
             {
                 new KeyBinding(InputKey.MouseLeft, TestAction.Action1)
             };

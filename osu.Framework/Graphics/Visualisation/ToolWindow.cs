@@ -69,17 +69,22 @@ namespace osu.Framework.Graphics.Visualisation
                         }
                     }
                 },
-                MainHorizontalContent = new FillFlowContainer
+                new TooltipContainer
                 {
                     RelativeSizeAxes = Axes.Y,
                     AutoSizeAxes = Axes.X,
-                    Direction = FillDirection.Horizontal,
-                    Children = new Drawable[]
+                    Child = MainHorizontalContent = new FillFlowContainer
                     {
-                        ScrollContent = new BasicScrollContainer<Drawable>
+                        RelativeSizeAxes = Axes.Y,
+                        AutoSizeAxes = Axes.X,
+                        Direction = FillDirection.Horizontal,
+                        Children = new Drawable[]
                         {
-                            RelativeSizeAxes = Axes.Y,
-                            Width = WIDTH
+                            ScrollContent = new BasicScrollContainer<Drawable>
+                            {
+                                RelativeSizeAxes = Axes.Y,
+                                Width = WIDTH
+                            }
                         }
                     }
                 },
@@ -89,7 +94,7 @@ namespace osu.Framework.Graphics.Visualisation
 
         protected void AddButton(string text, Action action)
         {
-            ToolbarContent.Add(new Button
+            ToolbarContent.Add(new BasicButton
             {
                 Size = new Vector2(button_width, button_height),
                 Text = text,
